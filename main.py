@@ -1,99 +1,73 @@
 import requests
 from bs4 import BeautifulSoup
-import lxml
-import time
 import json
-import csv
 
-headers = {
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
-    "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
-    "Cache-Control": "max-age=0",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36",
-}
+class FurnitureParser:
+    def __init__(self):
+        self.base_url = """тут будут урлс"""
+        self.headers = {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Cache-Control": "max-age=0",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36",
+        }
 
+    def get_page(self, url):
+        r = requests.get(url, headers=self.headers)
+        return r.text if r.status_code == 200 else None
 
-def get_lerom(url):
-    r = requests.get(url=url, headers=headers)
-    return r
+    def get_furniture_urls(self, category_urls):
+        furniture_urls = []
+        for category_url in category_urls:
+            html = self.get_page(category_url)
+            if html:
+                soup = BeautifulSoup(html, "lxml")
+                furniture_links = soup.select("#product-list > ul > li:nth-child(n) > a")
+                furniture_urls.extend([self.base_url + link.get('href') for link in furniture_links])
+        return furniture_urls
 
+    def parse_furniture(self, url):
+        html = self.get_page(url)
+        if html:
+            soup = BeautifulSoup(html, "lxml")
+            title = soup.find("h1").get_text().replace('\n', '')
+            img = self.base_url + soup.find('img').get('src').replace(' ', '')
+            price = soup.find(class_='price nowrap').get_text().replace(" ", "")[:-1].replace(' ', '').replace('\r', '')
+            price1 = int(price) * 0.29
+            itog_price1 = round(price1 / 100) * 100
+            itog_price = int(price) - itog_price1
+            description = soup.find(class_='features').get_text().replace('\n', '').replace('\r', '').replace('   ', '')
+            img_modul = [self.base_url + img.get("src").replace(' ', '') for img in soup.find(class_='description').find_all('img')]
+            price_modul = [price.get_text().replace(' ', '') for price in soup.find_all(class_='price nowrap')]
 
-def get_content(html):
+            furniture_data = {
+                'Название': title,
+                'Изображение': img,
+                'Цена с учетом - 29%': itog_price,
+                'Полная цена': price,
+                'Модуль': img_modul,
+                'Цена каждого модуля': price_modul,
+                'Описание': description,
+            }
+            return furniture_data
+        return None
 
-    url_list = ["https://svmebel-vrn.ru/category/gostinye/", "https://svmebel-vrn.ru/category/detskie/", "https://svmebel-vrn.ru/category/spalni/", "https://svmebel-vrn.ru/category/prikhozhie/"]
+    def save_to_json(self, data):
+        with open('svmebel.json', 'a', encoding='utf-8') as outfile:
+            json.dump(data, outfile, indent=4, ensure_ascii=False)
 
-    for url in url_list:
-        r = requests.get(str(url))
-        soup = BeautifulSoup(r.text, "lxml")
-        model = soup.select("#product-list > ul > li:nth-child(n) > a")
-        # model = soup.find_all(class_="thumbs product-list")
-        # print(model)
+    def main(self):
+        category_urls = [
+            """тут будут урлс"""
+        ]
+        furniture_urls = self.get_furniture_urls(category_urls)
 
-        for item in model:
-            url_list1 = []
-            url_list1.extend([('https://svmebel-vrn.ru' + item.get('href'))])
-            # print(url_list1)
-            for url1 in url_list1:
-                r = requests.get(str(url1))
-                soup = BeautifulSoup(r.text, "lxml")
-                model1 = soup.find_all(class_="content")
-
-                for item_content in model1:
-                    title = item_content.find('h1').get_text().replace('\n', '')
-                    img = 'https://svmebel-vrn.ru' + item_content.find('img').get('src').replace(' ', '')
-                    price = item_content.find(class_='price nowrap').get_text().replace(" ", "")[:-1].replace(' ', '').replace('\r', '')
-                    price1 = int(price) * 0.29
-                    itog_price1 = round(price1 / 100) * 100
-                    itog_price = int(price) - itog_price1
-
-                    opis = item_content.find(class_='features').get_text().replace('\n', '').replace('\r', '').replace('   ', '')
-
-                    try:
-                        img_modul = item_content.find(class_='description').find_all('img')
-                    except AttributeError:
-                        continue
-                    print("Нет модуля")
-                    price_modul = item_content.find_all(class_='price nowrap')
-
-                    mod = ("    ".join(
-                        str('https://svmebel-vrn.ru' + i.get("src").replace(' ', ''))
-                        for i in img_modul))
-                    mod_price = ("    ".join(
-                        str(i.get_text().replace(' ', ''))
-                        for i in price_modul))
-
-
-                    print(title, img, '\n', 'цена с вычетом процента: ', int(price) - price1, "₽", '\n', 'цена ориг: ', price, "₽", "\n", mod, '\n', mod_price, '\n', opis)
-
-
-                    data = {
-                        'Название': title,
-                        'Изображение': img,
-                        'Цена с учетом - 29%': itog_price,
-                        'Полная цена': price,
-                        'Модуль': mod,
-                        'Цена каждого модуля': mod_price,
-                        'Описание': opis,
-                    }
-                    with open('svmebel.json', 'a', encoding='utf-8') as outfile:
-                        json.dump(data, outfile, indent=4, ensure_ascii=False)
-
-
-
-
-def main():
-
-        url_gag = "https://svmebel-vrn.ru"
-
-        html = get_lerom(url_gag)
-        if html.status_code == 200:
-            get_content(html.text)
-        else:
-            print("ERROR")
-
-
-
+        for url in furniture_urls:
+            furniture_data = self.parse_furniture(url)
+            if furniture_data:
+                self.save_to_json(furniture_data)
 
 if __name__ == "__main__":
-    main()
+    parser = FurnitureParser()
+    parser.main()
