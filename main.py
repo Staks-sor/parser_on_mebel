@@ -1,6 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 import json
+from urllib.parse import urljoin
 
 class FurnitureParser:
     def __init__(self):
@@ -24,7 +25,11 @@ class FurnitureParser:
             if html:
                 soup = BeautifulSoup(html, "lxml")
                 furniture_links = soup.select("#product-list > ul > li:nth-child(n) > a")
-                furniture_urls.extend([self.base_url + link.get('href') for link in furniture_links])
+                furniture_urls.extend(
+                    urljoin(self.base_url, link.get("href"))
+                    for link in furniture_links
+                    if link.get("href")
+                )
         return furniture_urls
 
     def parse_furniture(self, url):
@@ -32,13 +37,17 @@ class FurnitureParser:
         if html:
             soup = BeautifulSoup(html, "lxml")
             title = soup.find("h1").get_text().replace('\n', '')
-            img = self.base_url + soup.find('img').get('src').replace(' ', '')
+            img = urljoin(self.base_url, soup.find('img').get('src').replace(' ', ''))
             price = soup.find(class_='price nowrap').get_text().replace(" ", "")[:-1].replace(' ', '').replace('\r', '')
             price1 = int(price) * 0.29
             itog_price1 = round(price1 / 100) * 100
             itog_price = int(price) - itog_price1
             description = soup.find(class_='features').get_text().replace('\n', '').replace('\r', '').replace('   ', '')
-            img_modul = [self.base_url + img.get("src").replace(' ', '') for img in soup.find(class_='description').find_all('img')]
+            img_modul = [
+                urljoin(self.base_url, image.get("src").replace(" ", ""))
+                for image in soup.find(class_="description").find_all("img")
+                if image.get("src")
+            ]
             price_modul = [price.get_text().replace(' ', '') for price in soup.find_all(class_='price nowrap')]
 
             furniture_data = {
